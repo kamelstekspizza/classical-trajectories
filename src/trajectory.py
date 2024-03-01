@@ -56,11 +56,12 @@ class Trajectory:
         
         limits = (self.t_0,self.t_end)
         y_0 = np.zeros(4)
-        y_0[0] = (0.5 + 0.5*self.p_t**2)/self.Laser.E(self.t_0) #Effective tunneling barrier, 0.5 is the I_p of hydrogen
+        y_0[0] = -(0.5 + 0.5*self.p_t**2)/self.Laser.E(self.t_0) #Effective tunneling barrier, 0.5 is the I_p of hydrogen
+        #y_0[0] = -(0.5 + np.sqrt(0.5**2-4*self.Laser.E(self.t_0)))/(2*self.Laser.E(self.t_0)) #Effective tunneling barrier, 0.5 is the I_p of hydrogen, Eichmann papers
         #y_0[0] = 0.5/self.Laser.E(self.t_0) #Effective tunneling barrier, 0.5 is the I_p of hydrogen
         #y_0[2] = -self.Laser.A(self.t_0)
         y_0[3] = self.p_t
-        solution = si.solve_ivp(self.RHS,limits,y_0,method = 'DOP853',max_step = 0.01*self.Laser.period)
+        solution = si.solve_ivp(self.RHS,limits,y_0,method = 'RK45',max_step = 0.25*self.Laser.period)
 
         
 
@@ -99,6 +100,7 @@ class Laser:
         self.tau = tau
         self.pulse_type = pulse_type
 
+        self.A_0 = self.E_0/self.omega
         self.period = 2*np.pi/self.omega
 
         if self.pulse_type == 'mono':
@@ -106,7 +108,14 @@ class Laser:
             self.E = self.E_mono
         elif self.pulse_type == 'cos_2':
             self.A = self.A_cos_2
-            self.E = self.E_cos_2
+            self.E = self.E_cos_2        
+        elif self.pulse_type == 'cos_6':
+            self.A = self.A_cos_6
+            self.E = self.E_cos_6
+
+        elif self.pulse_type == 'gaus':
+            self.A = self.A_gaus
+            self.E = self.E_gaus
 
     def A_mono(self,t):
        return -self.E_0/self.omega*np.sin(self.omega*t)
@@ -114,8 +123,21 @@ class Laser:
     def A_cos_2(self,t):
         return self.E_0/(self.omega)*np.sin(self.omega*t+self.u)*(np.cos(np.pi*t/self.tau))**2
 
+    def A_cos_6(self,t):
+        return self.E_0/(self.omega)*np.sin(self.omega*t+self.u)*(np.cos(np.pi*t/self.tau))**6
+
+    def A_gaus(self,t):
+        return self.A_0*np.sin(self.omega*t+self.u)*np.exp(-2.0*np.log(2)*(t/self.tau)**2)
+
     def E_mono(self,t):
         return self.E_0*np.cos(self.omega*t)
     
     def E_cos_2(self,t):
         return self.E_0/(self.omega)*(-self.omega*np.cos(self.omega*t+self.u)*(np.cos(np.pi*t/self.tau))**2+2*np.pi/self.tau*np.sin(self.omega*t +self.u)*np.sin(np.pi*t/self.tau)*np.cos(np.pi*t/self.tau))
+
+    def E_cos_6(self,t):
+        return self.E_0/(self.omega)*(-self.omega*np.cos(self.omega*t+self.u)*(np.cos(np.pi*t/self.tau))**2+6*np.pi/self.tau*np.sin(self.omega*t +self.u)*np.sin(np.pi*t/self.tau)*np.cos(np.pi*t/self.tau)**5)
+
+    def E_gaus(self,t):
+        return self.A_0*np.exp(-2.0*np.log(2)*(t/self.tau)**2)*(-self.omega*np.cos(self.omega*t+self.u) + 4.0*np.log(2)*t/self.tau**2*np.sin(self.omega*t+self.u))
+
